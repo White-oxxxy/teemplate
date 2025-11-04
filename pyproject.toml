@@ -5,5 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "adaptix>=3.0.0b11",
+    "msgspec>=0.19.0",
+    "sqlalchemy>=2.0.44",
     "uuid-utils>=0.11.1",
 ]

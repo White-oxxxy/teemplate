@@ -61,7 +61,7 @@ class BaseESAggregate(
         self._version += 1
 
         if is_new:
-            setattr(event, "aggregate_version", self._version)
+            event.aggregate_version = self._version
 
             self._uncommitted_events.append(event)
 
