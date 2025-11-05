@@ -14,3 +14,5 @@ class EventBusImpl:
 
     async def publish(self, event: DomainEvent) -> None:
         await self._outbox.add(event=event)
+
+        logger.debug("Event sent to outbox!", extra={"event_name": event.__class__.__name__})
