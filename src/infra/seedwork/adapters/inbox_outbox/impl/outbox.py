@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from uuid import UUID
 
 from sqlalchemy import (
     Result,
@@ -17,25 +18,28 @@ from infra.seedwork.adapters.inbox_outbox.message import (
 )
 from infra.seedwork.adapters.inbox_outbox.exceptions.outbox import (
     OutboxMessageAlreadyExistException,
-    CannotMarkPublishedAlreadyPublishedMessageException,
     OutboxMessageNotFoundException,
 )
-from infra.seedwork.adapters.inbox_outbox.convertors.outbox import convert_domain_event_to_outbox_message
-from infra.seedwork.db.models.outbox import OutboxMessageModel
-from infra.seedwork.db.convertors.outbox import (
-    convert_outbox_message_to_model,
-    convert_outbox_model_to_message,
+from infra.seedwork.adapters.inbox_outbox.convertors.outbox import (
+    DomainEventToOutboxMessageConvertor,
+    OutboxMessageToIntegrationEventConvertor,
 )
+from infra.seedwork.adapters.message_broker.integration_event import BaseIntegrationEvent
+from infra.seedwork.db.models.outbox import OutboxMessageModel
+from infra.seedwork.db.convertors.outbox import OutboxMessageModelConvertor
 
 
 @dataclass
 class SQLAlchemyOutboxImpl:
     _session: AsyncSession
+    _model_message_convertor: OutboxMessageModelConvertor
+    _domain_event_message_convertor: DomainEventToOutboxMessageConvertor
+    _message_to_integration_event_convertor: OutboxMessageToIntegrationEventConvertor
 
     async def add(self, event: DomainEvent) -> None:
-        message: OutboxMessage = convert_domain_event_to_outbox_message(event=event)
+        message: OutboxMessage = self._domain_event_message_convertor.convert(event=event)
 
-        message_orm: OutboxMessageModel = convert_outbox_message_to_model(message,)
+        message_orm: OutboxMessageModel = self._model_message_convertor.to_orm(message=message)
 
         self._session.add(message_orm)
 
@@ -43,10 +47,9 @@ class SQLAlchemyOutboxImpl:
             await self._session.flush()
 
         except IntegrityError as err:
-
             raise OutboxMessageAlreadyExistException(message_id=message.id) from err
 
-    async def get_next_pending(self) -> OutboxMessage | None:
+    async def get_next_pending(self) -> BaseIntegrationEvent | None:
         stmt: Select[tuple["OutboxMessageModel"]] = (
             select(OutboxMessageModel)
             .where(OutboxMessageModel.status == MessageStatus.PENDING)
@@ -67,28 +70,78 @@ class SQLAlchemyOutboxImpl:
 
         await self._session.flush()
 
-        message: OutboxMessage = convert_outbox_model_to_message(message_orm,)
+        message: OutboxMessage = self._model_message_convertor.from_orm(model=message_orm)
 
-        return message
+        event: BaseIntegrationEvent = self._message_to_integration_event_convertor.convert(
+            message=message
+        )
 
-    async def mark_as_published(self, message: OutboxMessage) -> None:
+        return event
+
+    async def mark_as_published(self, event_id: UUID) -> None:
         stmt: Update = (
             update(OutboxMessageModel)
             .where(
-                OutboxMessageModel.id == message.id,
-                OutboxMessageModel.status != MessageStatus.PUBLISHED
+                OutboxMessageModel.event_id == event_id,
+                OutboxMessageModel.status != MessageStatus.PUBLISHED,
+                OutboxMessageModel.status == MessageStatus.PROCESSING,
             )
             .values(status=MessageStatus.PUBLISHED)
             .execution_options(synchronize_session="fetch")
-            .returning(OutboxMessageModel.status)
+            .returning(OutboxMessageModel)
         )
 
-        result: Result = await self._session.execute(stmt)
+        result: Result[tuple["OutboxMessageModel"]] = await self._session.execute(statement=stmt)
 
-        status_row = result.first()
+        message_dto: OutboxMessage | None = result.scalar_one_or_none()
+
+        if message_dto is None:
+            raise OutboxMessageNotFoundException(event_id=event_id)
 
         await self._session.flush()
 
-    async def mark_as_failed(self, message: OutboxMessage) -> None: ...
+    async def mark_as_failed(self, event_id: UUID) -> None:
+        stmt: Update = (
+            update(OutboxMessageModel)
+            .where(
+                OutboxMessageModel.event_id == event_id,
+                OutboxMessageModel.status != MessageStatus.PUBLISHED,
+                OutboxMessageModel.status == MessageStatus.PROCESSING,
+            )
+            .values(status=MessageStatus.FAILED)
+            .execution_options(synchronize_session="fetch")
+            .returning(OutboxMessageModel)
+        )
 
-    async def to_publish(self) -> list[OutboxMessage]: ...
+        result: Result[tuple["OutboxMessageModel"]] = await self._session.execute(statement=stmt)
+
+        message_dto: OutboxMessage | None = result.scalar_one_or_none()
+
+        if message_dto is None:
+            raise OutboxMessageNotFoundException(event_id=event_id)
+
+        await self._session.flush()
+
+    async def to_publish(self) -> list[BaseIntegrationEvent]:
+        stmt: Select[tuple["OutboxMessageModel"]] = (
+            select(OutboxMessageModel)
+            .where(OutboxMessageModel.status == MessageStatus.PENDING)
+            .with_for_update(skip_locked=True)
+        )
+
+        result: Result[tuple["OutboxMessageModel"]] = await self._session.execute(statement=stmt)
+
+        message_orms: list[OutboxMessageModel] = list(result.scalars().all())
+
+        events: list[BaseIntegrationEvent] = []
+
+        for message_orm in message_orms:
+            outbox_message: OutboxMessage = self._model_message_convertor.from_orm(model=message_orm)
+
+            event: BaseIntegrationEvent = self._message_to_integration_event_convertor.convert(
+                message=outbox_message
+            )
+
+            events.append(event)
+
+        return events

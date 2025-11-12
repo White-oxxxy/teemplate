@@ -24,7 +24,11 @@ class InboxMessageModel(TimedBaseModel):
     __tablename__ = "inbox"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default_factory=uuid7)
-    event_id: Mapped[UUID] = mapped_column(unique=True, nullable=False)
+    event_id: Mapped[UUID] = mapped_column(
+        unique=True,
+        nullable=False,
+        index=True,
+    )
     event_type: Mapped[str] = mapped_column(nullable=False)
     aggregate_id: Mapped[str] = mapped_column(nullable=False)
     aggregate_type: Mapped[str] = mapped_column(nullable=False)

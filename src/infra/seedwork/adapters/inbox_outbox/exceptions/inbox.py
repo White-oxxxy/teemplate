@@ -9,20 +9,20 @@ from infra.seedwork.exception import InfraException
 
 
 @dataclass(eq=False)
-class OutboxException(
+class InboxException(
     InfraException,
     ABC,
 ):
     @abstractmethod
     @property
     def message(self) -> str:
-        message = f"Outbox exception!"
+        message = f"Inbox exception!"
 
         return message
 
 
 @dataclass(eq=False)
-class OutboxMessageAlreadyExistException(OutboxException):
+class InboxMessageAlreadyExistException(InboxException):
     message_id: UUID
 
     @property
@@ -33,7 +33,7 @@ class OutboxMessageAlreadyExistException(OutboxException):
 
 
 @dataclass(eq=False)
-class CannotMarkPublishedAlreadyPublishedMessageException(OutboxException):
+class CannotMarkProcessedAlreadyProcessedMessageException(InboxException):
     message_id: UUID
 
     @property
@@ -44,7 +44,7 @@ class CannotMarkPublishedAlreadyPublishedMessageException(OutboxException):
 
 
 @dataclass(eq=False)
-class OutboxMessageNotFoundException(OutboxException):
+class InboxMessageNotFoundException(InboxException):
     event_id: UUID
 
     @property

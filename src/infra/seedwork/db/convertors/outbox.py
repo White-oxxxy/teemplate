@@ -16,3 +16,17 @@ convert_outbox_model_to_message = get_converter(
     dst=OutboxMessage,
     recipe=[link(P[OutboxMessageModel].event_created_at, P[OutboxMessage].created_at)]
 )
+
+
+class OutboxMessageModelConvertor:
+    @staticmethod
+    def to_orm(message: OutboxMessage) -> OutboxMessageModel:
+        model: OutboxMessageModel = convert_outbox_message_to_model(message,)
+
+        return model
+
+    @staticmethod
+    def from_orm(model: OutboxMessageModel) -> OutboxMessage:
+        message: OutboxMessage = convert_outbox_model_to_message(model,)
+
+        return message

@@ -1,23 +1,20 @@
 from abc import ABC
+from dataclasses import dataclass, field
 from datetime import (
     datetime,
     timezone,
 )
 from uuid import UUID
 
-from msgspec import (
-    Struct,
-    field,
-)
 from uuid_utils import uuid7
 
 
-class BaseIntegrationEvent(
-    Struct,
+@dataclass(
     frozen=True,
     kw_only=True,
-    ABC,
-):
+    slots=True,
+)
+class BaseIntegrationEvent(ABC):
     event_id: UUID = field(default_factory=uuid7)
     event_type: str
     aggregate_id: str
