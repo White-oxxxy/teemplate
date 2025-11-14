@@ -27,6 +27,7 @@ from infra.seedwork.adapters.inbox_outbox.exceptions.inbox import (
     InboxMessageAlreadyExistException,
     InboxMessageNotFoundException,
 )
+from infra.seedwork.adapters.log.constants import LogType
 
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ class SQLAlchemyInboxImpl:
                 extra={
                     "event_id": event.event_id,
                     "error": str(err),
+                    "log_type": LogType.DEV,
                 },
                 exc_info=True,
             )
@@ -74,13 +76,19 @@ class SQLAlchemyInboxImpl:
         message_orm: InboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
-            logger.debug(msg="Inbox: no pending messages")
+            logger.debug(
+                msg="Inbox: no pending messages",
+                extra={"log_type": LogType.DEV,},
+            )
 
             return None
 
         logger.info(
             msg="Inbox: picked pending message",
-            extra={"event_id": message_orm.event_id},
+            extra={
+                "event_id": message_orm.event_id,
+                "log_type": LogType.DEV,
+            },
         )
 
         message_orm.status = MessageStatus.PROCESSING
@@ -94,6 +102,7 @@ class SQLAlchemyInboxImpl:
                 extra={
                     "event_id": message_orm.event_id,
                     "error": str(err),
+                    "log_type": LogType.DEV,
                 },
                 exc_info=True,
             )
@@ -127,7 +136,10 @@ class SQLAlchemyInboxImpl:
         if message_orm is None:
             logger.warning(
                 msg="Inbox: message not found to mark as PROCESSED",
-                extra={"event_id": event_id},
+                extra={
+                    "event_id": event_id,
+                    "log_type": LogType.DEV,
+                },
             )
 
             raise InboxMessageNotFoundException(event_id=event_id)
@@ -141,6 +153,7 @@ class SQLAlchemyInboxImpl:
                 extra={
                     "event_id": message_orm.event_id,
                     "error": str(err),
+                    "log_type": LogType.DEV,
                 },
                 exc_info=True
             )
@@ -150,7 +163,10 @@ class SQLAlchemyInboxImpl:
         else:
             logger.info(
                 msg="Inbox: message marked as PROCESSED",
-                extra={"event_id": event_id},
+                extra={
+                    "event_id": event_id,
+                    "log_type": LogType.DEV,
+                },
             )
 
     async def mark_as_failed(self, event_id: UUID) -> None:
@@ -172,7 +188,10 @@ class SQLAlchemyInboxImpl:
         if message_orm is None:
             logger.warning(
                 msg="Inbox: message not found to mark as FAILED",
-                extra={"event_id": event_id},
+                extra={
+                    "event_id": event_id,
+                    "log_type": LogType.DEV,
+                },
             )
 
             raise InboxMessageNotFoundException(event_id=event_id)
@@ -186,6 +205,7 @@ class SQLAlchemyInboxImpl:
                 extra={
                     "event_id": message_orm.event_id,
                     "error": str(err),
+                    "log_type": LogType.DEV,
                 },
                 exc_info=True,
             )
@@ -195,7 +215,10 @@ class SQLAlchemyInboxImpl:
         else:
             logger.info(
                 msg="Inbox: message marked as FAILED",
-                extra={"event_id": event_id},
+                extra={
+                    "event_id": event_id,
+                    "log_type": LogType.DEV,
+                },
             )
 
     async def to_processed(self) -> list[BaseIntegrationEvent]:
@@ -210,13 +233,19 @@ class SQLAlchemyInboxImpl:
         message_orms: list[InboxMessageModel] = list(result.scalars().all())
 
         if len(message_orms) == 0:
-            logger.debug(msg="Inbox: no pending messages to process")
+            logger.debug(
+                msg="Inbox: no pending messages to process",
+                extra={"log_type": LogType.DEV,},
+            )
 
             return []
 
         logger.info(
             msg="Inbox: picked pending messages",
-            extra={"message_count": len(message_orms)},
+            extra={
+                "message_count": len(message_orms),
+                "log_type": LogType.DEV,
+            },
         )
 
         for message_orm in message_orms:
@@ -228,7 +257,11 @@ class SQLAlchemyInboxImpl:
         except SQLAlchemyError as err:
             logger.error(
                 msg="Inbox: flush error while bulk changing status to PROCESSING",
-                extra={"error": str(err)},
+                extra={
+                    "session_id": id(self._session),
+                    "error": str(err),
+                    "log_type": LogType.DEV,
+                },
                 exc_info=True,
             )
 
