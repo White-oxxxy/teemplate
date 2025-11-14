@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import logging
 from uuid import UUID
 
 from sqlalchemy import (
@@ -29,6 +30,9 @@ from infra.seedwork.db.models.outbox import OutboxMessageModel
 from infra.seedwork.db.convertors.outbox import OutboxMessageModelConvertor
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass
 class SQLAlchemyOutboxImpl:
     _session: AsyncSession
@@ -47,6 +51,12 @@ class SQLAlchemyOutboxImpl:
             await self._session.flush()
 
         except IntegrityError as err:
+            logger.error(
+                "Outbox: integrity error while adding message (event_id=%s): %s",
+                event.event_id,
+                err,
+            )
+
             raise OutboxMessageAlreadyExistException(event_id=event.event_id) from err
 
     async def get_next_pending(self) -> BaseIntegrationEvent | None:
@@ -63,8 +73,11 @@ class SQLAlchemyOutboxImpl:
         message_orm: OutboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
+            logger.debug("Outbox: no pending messages")
 
             return None
+
+        logger.info("Outbox: picked pending message event_id=%s", message_orm.event_id)
 
         message_orm.status = MessageStatus.PROCESSING
 
@@ -96,9 +109,13 @@ class SQLAlchemyOutboxImpl:
         message_orm: OutboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
+            logger.warning("Outbox: message not found to mark as PUBLISHED (event_id=%s)", event_id)
+
             raise OutboxMessageNotFoundException(event_id=event_id)
 
         await self._session.flush()
+
+        logger.info("Outbox: message marked as PUBLISHED (event_id=%s)", event_id)
 
     async def mark_as_failed(self, event_id: UUID) -> None:
         stmt: Update = (
@@ -118,9 +135,13 @@ class SQLAlchemyOutboxImpl:
         message_orm: OutboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
+            logger.warning("Outbox: message not found to mark as FAILED (event_id=%s)", event_id)
+
             raise OutboxMessageNotFoundException(event_id=event_id)
 
         await self._session.flush()
+
+        logger.info("Outbox: message marked as FAILED (event_id=%s)", event_id)
 
     async def to_publish(self) -> list[BaseIntegrationEvent]:
         stmt: Select[tuple["OutboxMessageModel"]] = (
@@ -132,6 +153,11 @@ class SQLAlchemyOutboxImpl:
         result: Result[tuple["OutboxMessageModel"]] = await self._session.execute(statement=stmt)
 
         message_orms: list[OutboxMessageModel] = list(result.scalars().all())
+
+        if len(message_orms) == 0:
+            logger.debug("Outbox: no pending messages to process")
+
+            return []
 
         for message_orm in message_orms:
             message_orm.status = MessageStatus.PROCESSING
