@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import logging
 from uuid import UUID
 
 from sqlalchemy import (
@@ -8,7 +9,10 @@ from sqlalchemy import (
     select,
     update,
 )
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import (
+    IntegrityError,
+    SQLAlchemyError,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from infra.seedwork.adapters.message_broker.integration_event import BaseIntegrationEvent
@@ -23,6 +27,9 @@ from infra.seedwork.adapters.inbox_outbox.exceptions.inbox import (
     InboxMessageAlreadyExistException,
     InboxMessageNotFoundException,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -42,6 +49,12 @@ class SQLAlchemyInboxImpl:
             await self._session.flush()
 
         except IntegrityError as err:
+            logger.error(
+                "Inbox: integrity error while adding message (event_id=%s): %s",
+                event.event_id,
+                exc_info=err,
+            )
+
             raise InboxMessageAlreadyExistException(event_id=event.event_id) from err
 
     async def get_next_pending(self) -> BaseIntegrationEvent | None:
@@ -58,11 +71,25 @@ class SQLAlchemyInboxImpl:
         message_orm: InboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
+            logger.debug("Inbox: no pending messages")
+
             return None
+
+        logger.info("Inbox: picked pending message event_id=%s", message_orm.event_id)
 
         message_orm.status = MessageStatus.PROCESSING
 
-        await self._session.flush()
+        try:
+            await self._session.flush()
+
+        except SQLAlchemyError as err:
+            logger.error(
+                "Inbox: flush error while changing status to PROCESSING! (event_id=%s)",
+                message_orm.event_id,
+                exc_info=err
+            )
+
+            raise err
 
         message: InboxMessage = self._model_message_convertor.from_orm(model=message_orm)
 
@@ -90,9 +117,23 @@ class SQLAlchemyInboxImpl:
         message_orm: InboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
+            logger.warning("Inbox: message not found to mark as PROCESSED! (event_id=%s)", event_id)
+
             raise InboxMessageNotFoundException(event_id=event_id)
 
-        await self._session.flush()
+        try:
+            await self._session.flush()
+
+            logger.info("Inbox: message marked as PROCESSED! (event_id=%s)", event_id)
+
+        except SQLAlchemyError as err:
+            logger.error(
+                "Inbox: flush error while changing status to PROCESSED! (event_id=%s)",
+                message_orm.event_id,
+                exc_info=err
+            )
+
+            raise err
 
     async def mark_as_failed(self, event_id: UUID) -> None:
         stmt: Update = (
@@ -112,9 +153,23 @@ class SQLAlchemyInboxImpl:
         message_orm: InboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
+            logger.warning("Inbox: message not found to mark as FAILED (event_id=%s)", event_id)
+
             raise InboxMessageNotFoundException(event_id=event_id)
 
-        await self._session.flush()
+        try:
+            await self._session.flush()
+
+            logger.info("Inbox: message marked as FAILED (event_id=%s)", event_id)
+
+        except SQLAlchemyError as err:
+            logger.error(
+                "Inbox: flush error while changing status to FAILED! (event_id=%s)",
+                message_orm.event_id,
+                exc_info=err
+            )
+
+            raise err
 
     async def to_processed(self) -> list[BaseIntegrationEvent]:
         stmt: Select[tuple["InboxMessageModel"]] = (
@@ -130,7 +185,16 @@ class SQLAlchemyInboxImpl:
         for message_orm in message_orms:
             message_orm.status = MessageStatus.PROCESSING
 
-        await self._session.flush()
+        try:
+            await self._session.flush()
+
+        except SQLAlchemyError as err:
+            logger.error(
+                "Inbox: flush error while bulk changing status to PROCESSING!",
+                exc_info=err
+            )
+
+            raise err
 
         events: list[BaseIntegrationEvent] = []
 
