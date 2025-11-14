@@ -50,9 +50,12 @@ class SQLAlchemyInboxImpl:
 
         except IntegrityError as err:
             logger.error(
-                "Inbox: integrity error while adding message (event_id=%s): %s",
-                event.event_id,
-                exc_info=err,
+                msg="Inbox: integrity error while adding message",
+                extra={
+                    "event_id": event.event_id,
+                    "error": str(err),
+                },
+                exc_info=True,
             )
 
             raise InboxMessageAlreadyExistException(event_id=event.event_id) from err
@@ -71,11 +74,14 @@ class SQLAlchemyInboxImpl:
         message_orm: InboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
-            logger.debug("Inbox: no pending messages")
+            logger.debug(msg="Inbox: no pending messages")
 
             return None
 
-        logger.info("Inbox: picked pending message event_id=%s", message_orm.event_id)
+        logger.info(
+            msg="Inbox: picked pending message",
+            extra={"event_id": message_orm.event_id},
+        )
 
         message_orm.status = MessageStatus.PROCESSING
 
@@ -84,12 +90,15 @@ class SQLAlchemyInboxImpl:
 
         except SQLAlchemyError as err:
             logger.error(
-                "Inbox: flush error while changing status to PROCESSING! (event_id=%s)",
-                message_orm.event_id,
-                exc_info=err
+                msg="Inbox: flush error while changing status to PROCESSING",
+                extra={
+                    "event_id": message_orm.event_id,
+                    "error": str(err),
+                },
+                exc_info=True,
             )
 
-            raise err
+            raise
 
         message: InboxMessage = self._model_message_convertor.from_orm(model=message_orm)
 
@@ -117,7 +126,10 @@ class SQLAlchemyInboxImpl:
         message_orm: InboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
-            logger.warning("Inbox: message not found to mark as PROCESSED! (event_id=%s)", event_id)
+            logger.warning(
+                msg="Inbox: message not found to mark as PROCESSED",
+                extra={"event_id": event_id},
+            )
 
             raise InboxMessageNotFoundException(event_id=event_id)
 
@@ -126,15 +138,21 @@ class SQLAlchemyInboxImpl:
 
         except SQLAlchemyError as err:
             logger.error(
-                "Inbox: flush error while changing status to PROCESSED! (event_id=%s)",
-                message_orm.event_id,
-                exc_info=err
+                msg="Inbox: flush error while changing status to PROCESSED",
+                extra={
+                    "event_id": message_orm.event_id,
+                    "error": str(err),
+                },
+                exc_info=True
             )
 
-            raise err
+            raise
 
         else:
-            logger.info("Inbox: message marked as PROCESSED! (event_id=%s)", event_id)
+            logger.info(
+                msg="Inbox: message marked as PROCESSED",
+                extra={"event_id": event_id},
+            )
 
     async def mark_as_failed(self, event_id: UUID) -> None:
         stmt: Update = (
@@ -154,7 +172,10 @@ class SQLAlchemyInboxImpl:
         message_orm: InboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
-            logger.warning("Inbox: message not found to mark as FAILED (event_id=%s)", event_id)
+            logger.warning(
+                msg="Inbox: message not found to mark as FAILED",
+                extra={"event_id": event_id},
+            )
 
             raise InboxMessageNotFoundException(event_id=event_id)
 
@@ -163,15 +184,21 @@ class SQLAlchemyInboxImpl:
 
         except SQLAlchemyError as err:
             logger.error(
-                "Inbox: flush error while changing status to FAILED! (event_id=%s)",
-                message_orm.event_id,
-                exc_info=err
+                msg="Inbox: flush error while changing status to FAILED",
+                extra={
+                    "event_id": message_orm.event_id,
+                    "error": str(err),
+                },
+                exc_info=True,
             )
 
-            raise err
+            raise
 
         else:
-            logger.info("Inbox: message marked as FAILED (event_id=%s)", event_id)
+            logger.info(
+                msg="Inbox: message marked as FAILED",
+                extra={"event_id": event_id},
+            )
 
     async def to_processed(self) -> list[BaseIntegrationEvent]:
         stmt: Select[tuple["InboxMessageModel"]] = (
@@ -184,6 +211,16 @@ class SQLAlchemyInboxImpl:
 
         message_orms: list[InboxMessageModel] = list(result.scalars().all())
 
+        if len(message_orms) == 0:
+            logger.debug(msg="Inbox: no pending messages to process")
+
+            return []
+
+        logger.info(
+            msg="Inbox: picked pending messages",
+            extra={"message_count": len(message_orms)},
+        )
+
         for message_orm in message_orms:
             message_orm.status = MessageStatus.PROCESSING
 
@@ -192,11 +229,12 @@ class SQLAlchemyInboxImpl:
 
         except SQLAlchemyError as err:
             logger.error(
-                "Inbox: flush error while bulk changing status to PROCESSING!",
-                exc_info=err
+                msg="Inbox: flush error while bulk changing status to PROCESSING",
+                extra={"error": str(err)},
+                exc_info=True,
             )
 
-            raise err
+            raise
 
         events: list[BaseIntegrationEvent] = []
 
