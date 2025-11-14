@@ -55,9 +55,12 @@ class SQLAlchemyOutboxImpl:
 
         except IntegrityError as err:
             logger.error(
-                "Outbox: integrity error while adding message (event_id=%s): %s",
-                event.event_id,
-                exc_info=err,
+                msg="Outbox: integrity error while adding message!",
+                extra={
+                    "event_id": event.event_id,
+                    "error": str(err)
+                },
+                exc_info=True,
             )
 
             raise OutboxMessageAlreadyExistException(event_id=event.event_id) from err
@@ -76,11 +79,14 @@ class SQLAlchemyOutboxImpl:
         message_orm: OutboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
-            logger.debug("Outbox: no pending messages")
+            logger.debug(msg="Outbox: no pending messages")
 
             return None
 
-        logger.info("Outbox: picked pending message event_id=%s", message_orm.event_id)
+        logger.info(
+            msg="Outbox: picked pending message",
+            extra={"event_id": message_orm.event_id},
+        )
 
         message_orm.status = MessageStatus.PROCESSING
 
@@ -89,12 +95,15 @@ class SQLAlchemyOutboxImpl:
 
         except SQLAlchemyError as err:
             logger.error(
-                "Outbox: flush error while changing status to PROCESSING! (event_id=%s)",
-                message_orm.event_id,
-                exc_info=err
+                msg="Outbox: flush error while changing status to PROCESSING",
+                extra={
+                    "event_id": message_orm.event_id,
+                    "error": str(err),
+                },
+                exc_info=True,
             )
 
-            raise err
+            raise
 
         message: OutboxMessage = self._model_message_convertor.from_orm(model=message_orm)
 
@@ -122,7 +131,10 @@ class SQLAlchemyOutboxImpl:
         message_orm: OutboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
-            logger.warning("Outbox: message not found to mark as PUBLISHED (event_id=%s)", event_id)
+            logger.warning(
+                msg="Outbox: message not found to mark as PUBLISHED",
+                extra={"event_id": event_id},
+            )
 
             raise OutboxMessageNotFoundException(event_id=event_id)
 
@@ -131,15 +143,21 @@ class SQLAlchemyOutboxImpl:
 
         except SQLAlchemyError as err:
             logger.error(
-                "Outbox: flush error while changing status to PUBLISHED! (event_id=%s)",
-                message_orm.event_id,
-                exc_info=err
+                msg="Outbox: flush error while changing status to PUBLISHED",
+                extra={
+                    "event_id": message_orm.event_id,
+                    "error": str(err),
+                },
+                exc_info=True,
             )
 
-            raise err
+            raise
 
         else:
-            logger.info("Outbox: message marked as PUBLISHED (event_id=%s)", event_id)
+            logger.info(
+                msg="Outbox: message marked as PUBLISHED",
+                extra={"event_id": event_id},
+            )
 
     async def mark_as_failed(self, event_id: UUID) -> None:
         stmt: Update = (
@@ -159,7 +177,10 @@ class SQLAlchemyOutboxImpl:
         message_orm: OutboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
-            logger.warning("Outbox: message not found to mark as FAILED (event_id=%s)", event_id)
+            logger.warning(
+                msg="Outbox: message not found to mark as FAILED",
+                extra={"event_id": event_id},
+            )
 
             raise OutboxMessageNotFoundException(event_id=event_id)
 
@@ -168,15 +189,21 @@ class SQLAlchemyOutboxImpl:
 
         except SQLAlchemyError as err:
             logger.error(
-                "Outbox: flush error while changing status to FAILED! (event_id=%s)",
-                message_orm.event_id,
-                exc_info=err
+                msg="Outbox: flush error while changing status to FAILED",
+                extra={
+                    "event_id": message_orm.event_id,
+                    "error": str(err),
+                },
+                exc_info=True
             )
 
-            raise err
+            raise
 
         else:
-            logger.info("Outbox: message marked as FAILED (event_id=%s)", event_id)
+            logger.info(
+                msg="Outbox: message marked as FAILED (event_id=%s)",
+                extra={"event_id": event_id},
+            )
 
     async def to_publish(self) -> list[BaseIntegrationEvent]:
         stmt: Select[tuple["OutboxMessageModel"]] = (
@@ -190,7 +217,7 @@ class SQLAlchemyOutboxImpl:
         message_orms: list[OutboxMessageModel] = list(result.scalars().all())
 
         if len(message_orms) == 0:
-            logger.debug("Outbox: no pending messages to process")
+            logger.debug(msg="Outbox: no pending messages to process")
 
             return []
 
@@ -202,11 +229,12 @@ class SQLAlchemyOutboxImpl:
 
         except SQLAlchemyError as err:
             logger.error(
-                "Outbox: flush error while bulk changing status to PROCESSING!",
-                exc_info=err
+                msg="Outbox: flush error while bulk changing status to PROCESSING!",
+                extra={"error": str(err)},
+                exc_info=True,
             )
 
-            raise err
+            raise
 
         events: list[BaseIntegrationEvent] = []
 
