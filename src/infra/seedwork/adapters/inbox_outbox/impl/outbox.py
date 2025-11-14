@@ -221,6 +221,11 @@ class SQLAlchemyOutboxImpl:
 
             return []
 
+        logger.info(
+            msg="Outbox: picked pending messages",
+            extra={"message_count": len(message_orms)},
+        )
+
         for message_orm in message_orms:
             message_orm.status = MessageStatus.PROCESSING
 
