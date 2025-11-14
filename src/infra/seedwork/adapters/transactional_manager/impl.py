@@ -12,6 +12,8 @@ from infra.seedwork.adapters.transactional_manager.exceptions import (
     TransactionalManagerFlushException,
     TransactionalManagerIntegrityError,
 )
+from infra.seedwork.adapters.log.constants import LogType
+
 
 
 logger = logging.getLogger(__name__)
@@ -30,13 +32,18 @@ class SQLAlchemyTransactionalManagerImpl:
                 msg="Transactional manager: commit error",
                 extra={
                     "session_id": id(self._session),
-                    "error": str(err)},
+                    "error": str(err),
+                    "log_type": LogType.DEV,
+                },
                 exc_info=True,
             )
 
             raise TransactionalManagerCommitException() from err
 
-        logger.debug(msg="Transactional manager: commit done")
+        logger.debug(
+            msg="Transactional manager: commit done",
+            extra={"log_type": LogType.DEV,},
+        )
 
     async def flush(self) -> None:
         try:
@@ -47,7 +54,9 @@ class SQLAlchemyTransactionalManagerImpl:
                 msg="Transactional manager: flush error",
                 extra={
                     "session_id": id(self._session),
-                    "error": str(err)},
+                    "error": str(err),
+                    "log_type": LogType.DEV,
+                },
                 exc_info=True,
             )
 
@@ -58,11 +67,16 @@ class SQLAlchemyTransactionalManagerImpl:
                 msg="Transactional manager: flush error",
                 extra={
                     "session_id": id(self._session),
-                    "error": str(err)},
+                    "error": str(err),
+                    "log_type": LogType.DEV,
+                },
                 exc_info=True,
             )
 
             raise TransactionalManagerFlushException() from err
 
         else:
-            logger.debug(msg="Transactional manager: flush done")
+            logger.debug(
+                msg="Transactional manager: flush done",
+                extra={"log_type": LogType.DEV,},
+            )

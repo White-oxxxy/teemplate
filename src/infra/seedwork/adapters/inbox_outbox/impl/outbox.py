@@ -31,6 +31,7 @@ from infra.seedwork.adapters.inbox_outbox.convertors.outbox import (
 from infra.seedwork.adapters.message_broker.integration_event import BaseIntegrationEvent
 from infra.seedwork.db.models.outbox import OutboxMessageModel
 from infra.seedwork.db.convertors.outbox import OutboxMessageModelConvertor
+from infra.seedwork.adapters.log.constants import LogType
 
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,8 @@ class SQLAlchemyOutboxImpl:
                 msg="Outbox: integrity error while adding message!",
                 extra={
                     "event_id": event.event_id,
-                    "error": str(err)
+                    "error": str(err),
+                    "log_type": LogType.DEV,
                 },
                 exc_info=True,
             )
@@ -79,13 +81,19 @@ class SQLAlchemyOutboxImpl:
         message_orm: OutboxMessageModel | None = result.scalar_one_or_none()
 
         if message_orm is None:
-            logger.debug(msg="Outbox: no pending messages")
+            logger.debug(
+                msg="Outbox: no pending messages",
+                extra={"log_type": LogType.DEV,},
+            )
 
             return None
 
         logger.info(
             msg="Outbox: picked pending message",
-            extra={"event_id": message_orm.event_id},
+            extra={
+                "event_id": message_orm.event_id,
+                "log_type": LogType.DEV,
+            },
         )
 
         message_orm.status = MessageStatus.PROCESSING
@@ -99,6 +107,7 @@ class SQLAlchemyOutboxImpl:
                 extra={
                     "event_id": message_orm.event_id,
                     "error": str(err),
+                    "log_type": LogType.DEV,
                 },
                 exc_info=True,
             )
@@ -133,7 +142,10 @@ class SQLAlchemyOutboxImpl:
         if message_orm is None:
             logger.warning(
                 msg="Outbox: message not found to mark as PUBLISHED",
-                extra={"event_id": event_id},
+                extra={
+                    "event_id": event_id,
+                    "log_type": LogType.DEV,
+                },
             )
 
             raise OutboxMessageNotFoundException(event_id=event_id)
@@ -147,6 +159,7 @@ class SQLAlchemyOutboxImpl:
                 extra={
                     "event_id": message_orm.event_id,
                     "error": str(err),
+                    "log_type": LogType.DEV,
                 },
                 exc_info=True,
             )
@@ -156,7 +169,10 @@ class SQLAlchemyOutboxImpl:
         else:
             logger.info(
                 msg="Outbox: message marked as PUBLISHED",
-                extra={"event_id": event_id},
+                extra={
+                    "event_id": event_id,
+                    "log_type": LogType.DEV,
+                },
             )
 
     async def mark_as_failed(self, event_id: UUID) -> None:
@@ -179,7 +195,10 @@ class SQLAlchemyOutboxImpl:
         if message_orm is None:
             logger.warning(
                 msg="Outbox: message not found to mark as FAILED",
-                extra={"event_id": event_id},
+                extra={
+                    "event_id": event_id,
+                    "log_type": LogType.DEV,
+                },
             )
 
             raise OutboxMessageNotFoundException(event_id=event_id)
@@ -193,6 +212,7 @@ class SQLAlchemyOutboxImpl:
                 extra={
                     "event_id": message_orm.event_id,
                     "error": str(err),
+                    "log_type": LogType.DEV,
                 },
                 exc_info=True
             )
@@ -202,7 +222,10 @@ class SQLAlchemyOutboxImpl:
         else:
             logger.info(
                 msg="Outbox: message marked as FAILED (event_id=%s)",
-                extra={"event_id": event_id},
+                extra={
+                    "event_id": event_id,
+                    "log_type": LogType.DEV,
+                },
             )
 
     async def to_publish(self) -> list[BaseIntegrationEvent]:
@@ -217,13 +240,19 @@ class SQLAlchemyOutboxImpl:
         message_orms: list[OutboxMessageModel] = list(result.scalars().all())
 
         if len(message_orms) == 0:
-            logger.debug(msg="Outbox: no pending messages to process")
+            logger.debug(
+                msg="Outbox: no pending messages to process",
+                extra={"log_type": LogType.DEV,},
+            )
 
             return []
 
         logger.info(
             msg="Outbox: picked pending messages",
-            extra={"message_count": len(message_orms)},
+            extra={
+                "message_count": len(message_orms),
+                "log_type": LogType.DEV,
+            },
         )
 
         for message_orm in message_orms:
@@ -235,7 +264,11 @@ class SQLAlchemyOutboxImpl:
         except SQLAlchemyError as err:
             logger.error(
                 msg="Outbox: flush error while bulk changing status to PROCESSING!",
-                extra={"error": str(err)},
+                extra={
+                    "session_id": id(self._session),
+                    "error": str(err),
+                    "log_type": LogType.DEV,
+                },
                 exc_info=True,
             )
 
