@@ -129,8 +129,6 @@ class SQLAlchemyOutboxImpl:
         try:
             await self._session.flush()
 
-            logger.info("Outbox: message marked as PUBLISHED (event_id=%s)", event_id)
-
         except SQLAlchemyError as err:
             logger.error(
                 "Outbox: flush error while changing status to PUBLISHED! (event_id=%s)",
@@ -139,6 +137,9 @@ class SQLAlchemyOutboxImpl:
             )
 
             raise err
+
+        else:
+            logger.info("Outbox: message marked as PUBLISHED (event_id=%s)", event_id)
 
     async def mark_as_failed(self, event_id: UUID) -> None:
         stmt: Update = (
@@ -165,8 +166,6 @@ class SQLAlchemyOutboxImpl:
         try:
             await self._session.flush()
 
-            logger.info("Outbox: message marked as FAILED (event_id=%s)", event_id)
-
         except SQLAlchemyError as err:
             logger.error(
                 "Outbox: flush error while changing status to FAILED! (event_id=%s)",
@@ -175,6 +174,9 @@ class SQLAlchemyOutboxImpl:
             )
 
             raise err
+
+        else:
+            logger.info("Outbox: message marked as FAILED (event_id=%s)", event_id)
 
     async def to_publish(self) -> list[BaseIntegrationEvent]:
         stmt: Select[tuple["OutboxMessageModel"]] = (

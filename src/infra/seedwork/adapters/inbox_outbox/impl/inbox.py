@@ -124,8 +124,6 @@ class SQLAlchemyInboxImpl:
         try:
             await self._session.flush()
 
-            logger.info("Inbox: message marked as PROCESSED! (event_id=%s)", event_id)
-
         except SQLAlchemyError as err:
             logger.error(
                 "Inbox: flush error while changing status to PROCESSED! (event_id=%s)",
@@ -134,6 +132,9 @@ class SQLAlchemyInboxImpl:
             )
 
             raise err
+
+        else:
+            logger.info("Inbox: message marked as PROCESSED! (event_id=%s)", event_id)
 
     async def mark_as_failed(self, event_id: UUID) -> None:
         stmt: Update = (
@@ -160,8 +161,6 @@ class SQLAlchemyInboxImpl:
         try:
             await self._session.flush()
 
-            logger.info("Inbox: message marked as FAILED (event_id=%s)", event_id)
-
         except SQLAlchemyError as err:
             logger.error(
                 "Inbox: flush error while changing status to FAILED! (event_id=%s)",
@@ -170,6 +169,9 @@ class SQLAlchemyInboxImpl:
             )
 
             raise err
+
+        else:
+            logger.info("Inbox: message marked as FAILED (event_id=%s)", event_id)
 
     async def to_processed(self) -> list[BaseIntegrationEvent]:
         stmt: Select[tuple["InboxMessageModel"]] = (
