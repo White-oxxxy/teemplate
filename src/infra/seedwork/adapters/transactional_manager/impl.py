@@ -25,22 +25,44 @@ class SQLAlchemyTransactionalManagerImpl:
         try:
             await self._session.commit()
 
-            logger.debug("Commit done!")
-
         except SQLAlchemyError as err:
+            logger.error(
+                msg="Transactional manager: commit error",
+                extra={
+                    "session_id": id(self._session),
+                    "error": str(err)},
+                exc_info=True,
+            )
 
             raise TransactionalManagerCommitException() from err
+
+        logger.debug(msg="Transactional manager: commit done")
 
     async def flush(self) -> None:
         try:
             await self._session.flush()
 
-            logger.debug("Flush done!")
-
         except IntegrityError as err:
+            logger.error(
+                msg="Transactional manager: flush error",
+                extra={
+                    "session_id": id(self._session),
+                    "error": str(err)},
+                exc_info=True,
+            )
 
             raise TransactionalManagerIntegrityError() from err
 
         except SQLAlchemyError as err:
+            logger.error(
+                msg="Transactional manager: flush error",
+                extra={
+                    "session_id": id(self._session),
+                    "error": str(err)},
+                exc_info=True,
+            )
 
             raise TransactionalManagerFlushException() from err
+
+        else:
+            logger.debug(msg="Transactional manager: flush done")
