@@ -5,6 +5,7 @@ from datetime import (
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import Index
 from sqlalchemy.orm import (
     Mapped,
     mapped_column,
@@ -23,11 +24,13 @@ from infra.seedwork.adapters.inbox_outbox.message import MessageStatus
 class InboxMessageModel(TimedBaseModel):
     __tablename__ = "inbox"
 
-    id: Mapped[UUID] = mapped_column(primary_key=True, default_factory=uuid7)
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True,
+        default_factory=uuid7,
+    )
     event_id: Mapped[UUID] = mapped_column(
         unique=True,
         nullable=False,
-        index=True,
     )
     event_type: Mapped[str] = mapped_column(nullable=False)
     aggregate_id: Mapped[str] = mapped_column(nullable=False)
@@ -48,4 +51,12 @@ class InboxMessageModel(TimedBaseModel):
     processed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_inbox_event_id_processing",
+            "event_id",
+            postgresql_where=(status == MessageStatus.PROCESSING)
+        ),
     )

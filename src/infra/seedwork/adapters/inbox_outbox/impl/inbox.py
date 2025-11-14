@@ -113,7 +113,6 @@ class SQLAlchemyInboxImpl:
             update(InboxMessageModel)
             .where(
                 InboxMessageModel.event_id == event_id,
-                InboxMessageModel.status != MessageStatus.PROCESSED,
                 InboxMessageModel.status == MessageStatus.PROCESSING,
             )
             .values(status=MessageStatus.PUBLISHED)
@@ -159,7 +158,6 @@ class SQLAlchemyInboxImpl:
             update(InboxMessageModel)
             .where(
                 InboxMessageModel.event_id == event_id,
-                InboxMessageModel.status != MessageStatus.PUBLISHED,
                 InboxMessageModel.status == MessageStatus.PROCESSING,
             )
             .values(status=MessageStatus.FAILED)

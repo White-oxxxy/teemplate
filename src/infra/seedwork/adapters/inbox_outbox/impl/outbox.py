@@ -127,7 +127,6 @@ class SQLAlchemyOutboxImpl:
             update(OutboxMessageModel)
             .where(
                 OutboxMessageModel.event_id == event_id,
-                OutboxMessageModel.status != MessageStatus.PUBLISHED,
                 OutboxMessageModel.status == MessageStatus.PROCESSING,
             )
             .values(status=MessageStatus.PUBLISHED)
@@ -180,7 +179,6 @@ class SQLAlchemyOutboxImpl:
             update(OutboxMessageModel)
             .where(
                 OutboxMessageModel.event_id == event_id,
-                OutboxMessageModel.status != MessageStatus.PUBLISHED,
                 OutboxMessageModel.status == MessageStatus.PROCESSING,
             )
             .values(status=MessageStatus.FAILED)
