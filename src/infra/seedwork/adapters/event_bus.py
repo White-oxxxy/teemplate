@@ -19,12 +19,18 @@ class EventBusImpl:
 
         except OutboxException as err:
             logger.error(
-                "Event bus: Failed to send event to outbox!",
-                err,
-                extra={"event_name": event.__class__.__name__},
+                msg="Event bus: Failed to send event to outbox",
+                extra={
+                    "event_name": event.__class__.__name__,
+                    "error": str(err),
+                },
+                exc_info=True,
             )
 
-            raise err
+            raise
 
         else:
-            logger.debug("Event sent to outbox!", extra={"event_name": event.__class__.__name__})
+            logger.debug(
+                msg="Event sent to outbox",
+                extra={"event_name": event.__class__.__name__},
+            )
