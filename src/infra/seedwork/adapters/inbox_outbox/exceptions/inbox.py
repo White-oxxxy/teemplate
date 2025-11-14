@@ -23,22 +23,11 @@ class InboxException(
 
 @dataclass(eq=False)
 class InboxMessageAlreadyExistException(InboxException):
-    message_id: UUID
+    event_id: UUID
 
     @property
     def message(self) -> str:
-        message = f"Message with id {self.message_id} already exist!"
-
-        return message
-
-
-@dataclass(eq=False)
-class CannotMarkProcessedAlreadyProcessedMessageException(InboxException):
-    message_id: UUID
-
-    @property
-    def message(self) -> str:
-        message = f"Cannot mark PUBLISHED message {self.message_id} (already published)!"
+        message = f"Message with event id {self.event_id} already exist!"
 
         return message
 

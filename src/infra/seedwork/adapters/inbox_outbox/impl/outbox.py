@@ -21,8 +21,8 @@ from infra.seedwork.adapters.inbox_outbox.exceptions.outbox import (
     OutboxMessageNotFoundException,
 )
 from infra.seedwork.adapters.inbox_outbox.convertors.outbox import (
-    DomainEventToOutboxMessageConvertor,
-    OutboxMessageToIntegrationEventConvertor,
+    DomainEventOutboxMessageConvertor,
+    OutboxMessageIntegrationEventConvertor,
 )
 from infra.seedwork.adapters.message_broker.integration_event import BaseIntegrationEvent
 from infra.seedwork.db.models.outbox import OutboxMessageModel
@@ -33,11 +33,11 @@ from infra.seedwork.db.convertors.outbox import OutboxMessageModelConvertor
 class SQLAlchemyOutboxImpl:
     _session: AsyncSession
     _model_message_convertor: OutboxMessageModelConvertor
-    _domain_event_message_convertor: DomainEventToOutboxMessageConvertor
-    _message_to_integration_event_convertor: OutboxMessageToIntegrationEventConvertor
+    _domain_event_message_convertor: DomainEventOutboxMessageConvertor
+    _message_integration_event_convertor: OutboxMessageIntegrationEventConvertor
 
     async def add(self, event: DomainEvent) -> None:
-        message: OutboxMessage = self._domain_event_message_convertor.convert(event=event)
+        message: OutboxMessage = self._domain_event_message_convertor.to_message(event=event)
 
         message_orm: OutboxMessageModel = self._model_message_convertor.to_orm(message=message)
 
@@ -47,7 +47,7 @@ class SQLAlchemyOutboxImpl:
             await self._session.flush()
 
         except IntegrityError as err:
-            raise OutboxMessageAlreadyExistException(message_id=message.id) from err
+            raise OutboxMessageAlreadyExistException(event_id=event.event_id) from err
 
     async def get_next_pending(self) -> BaseIntegrationEvent | None:
         stmt: Select[tuple["OutboxMessageModel"]] = (
@@ -72,7 +72,7 @@ class SQLAlchemyOutboxImpl:
 
         message: OutboxMessage = self._model_message_convertor.from_orm(model=message_orm)
 
-        event: BaseIntegrationEvent = self._message_to_integration_event_convertor.convert(
+        event: BaseIntegrationEvent = self._message_integration_event_convertor.to_event(
             message=message
         )
 
@@ -93,9 +93,9 @@ class SQLAlchemyOutboxImpl:
 
         result: Result[tuple["OutboxMessageModel"]] = await self._session.execute(statement=stmt)
 
-        message_dto: OutboxMessage | None = result.scalar_one_or_none()
+        message_orm: OutboxMessageModel | None = result.scalar_one_or_none()
 
-        if message_dto is None:
+        if message_orm is None:
             raise OutboxMessageNotFoundException(event_id=event_id)
 
         await self._session.flush()
@@ -115,9 +115,9 @@ class SQLAlchemyOutboxImpl:
 
         result: Result[tuple["OutboxMessageModel"]] = await self._session.execute(statement=stmt)
 
-        message_dto: OutboxMessage | None = result.scalar_one_or_none()
+        message_orm: OutboxMessageModel | None = result.scalar_one_or_none()
 
-        if message_dto is None:
+        if message_orm is None:
             raise OutboxMessageNotFoundException(event_id=event_id)
 
         await self._session.flush()
@@ -133,12 +133,17 @@ class SQLAlchemyOutboxImpl:
 
         message_orms: list[OutboxMessageModel] = list(result.scalars().all())
 
+        for message_orm in message_orms:
+            message_orm.status = MessageStatus.PROCESSING
+
+        await self._session.flush()
+
         events: list[BaseIntegrationEvent] = []
 
         for message_orm in message_orms:
             outbox_message: OutboxMessage = self._model_message_convertor.from_orm(model=message_orm)
 
-            event: BaseIntegrationEvent = self._message_to_integration_event_convertor.convert(
+            event: BaseIntegrationEvent = self._message_integration_event_convertor.to_event(
                 message=outbox_message
             )
 
