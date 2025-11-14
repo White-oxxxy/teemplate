@@ -9,7 +9,7 @@ from msgspec import (
 from uuid_utils import uuid7
 
 
-class BaseKafkaMessage(
+class Message(
     Struct,
     frozen=True,
     kw_only=True,
@@ -17,7 +17,6 @@ class BaseKafkaMessage(
 ):
     id: UUID = field(default_factory=uuid7)
     body: bytes | Any
-    topic: str = "",
     partition: int | None = None,
     timestamp_ms: int | None = None,
     headers: dict[str, str] | None = None,
